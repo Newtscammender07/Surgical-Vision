@@ -18,6 +18,9 @@ class SurgicalMonitor:
         # Default focus zone margin (can be overridden per frame)
         self.focus_zone_margin = 0.2
 
+        # Classes to ignore from the generic COCO model to avoid mislabeling surgical tools
+        self.ignored_generic = ["scissors", "knife", "fork", "spoon"]
+
     def get_focus_zone(self, frame_width, frame_height, margin=None):
         m = margin if margin is not None else self.focus_zone_margin
         x1 = int(frame_width * m)
@@ -44,7 +47,7 @@ class SurgicalMonitor:
             return True
         return False
 
-    def process_frame(self, frame, custom_conf=None, alert_margin=None, show_focus_zone=True):
+    def process_frame(self, frame, custom_conf=None, alert_margin=None, show_focus_zone=True, show_generic=True):
         """
         Analyzes a single frame, runs detection, and draws alerts.
         Returns: (annotated_frame, analytics_dict)
@@ -88,6 +91,11 @@ class SurgicalMonitor:
                     
                     if is_generic:
                         class_name = self.generic_model.names[cls_id]
+                        
+                        # Filter out specific generic classes that overlap with surgical tools
+                        if class_name in self.ignored_generic:
+                            continue
+                            
                         # Change color to Purple for generic objects to distinguish them
                         color = (255, 0, 255) 
                         bg_color = (255, 0, 255)
@@ -129,7 +137,8 @@ class SurgicalMonitor:
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 2)
 
         # Draw generic boxes first so surgical tools are always drawn on top
-        draw_boxes(generic_results, annotated_frame, focus_zone, is_generic=True)
+        if show_generic:
+            draw_boxes(generic_results, annotated_frame, focus_zone, is_generic=True)
         draw_boxes(custom_results, annotated_frame, focus_zone, is_generic=False)
 
         if analytics["instrument_count"] > 0:

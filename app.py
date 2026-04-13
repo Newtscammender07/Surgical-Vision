@@ -134,9 +134,12 @@ st.markdown("<p style='text-align: center; color:#94a3b8; margin-bottom: 30px;'>
 
 @st.cache_resource
 def load_monitor():
-    custom_model_path = 'runs/detect/surgical_detector_v17/weights/best.pt'
-    if os.path.exists(custom_model_path):
-        model_path = custom_model_path
+    # Priority: Local file in repo > Deep runs folder > Fallback
+    if os.path.exists('best.pt'):
+        model_path = 'best.pt'
+        status = "Surgical Specialist (v17)"
+    elif os.path.exists('runs/detect/surgical_detector_v17/weights/best.pt'):
+        model_path = 'runs/detect/surgical_detector_v17/weights/best.pt'
         status = "Custom Trained (v17)"
     else:
         model_path = 'yolov8n.pt'
@@ -175,6 +178,9 @@ with col_left:
     
     alert_margin = st.slider("Alert Sensitivity (Focus Margin)", min_value=0.0, max_value=0.5, value=0.2, step=0.05,
                              help="Adjust the size of the central focus zone. Lower means a larger focus area.")
+    
+    show_generic = st.toggle("Show Generic Objects", value=False, 
+                             help="Display non-surgical objects like people or bottles.")
     
     st.markdown("<br>", unsafe_allow_html=True)
     st.info(f"**Engine:** {model_status}")
@@ -293,7 +299,8 @@ with col_center:
                     image, 
                     custom_conf=conf_threshold, 
                     alert_margin=alert_margin, 
-                    show_focus_zone=show_focus
+                    show_focus_zone=show_focus,
+                    show_generic=show_generic
                 )
                 fps = 1.0 / (time.time() - start_time)
                 processed_image = cv2.cvtColor(processed_image, cv2.COLOR_BGR2RGB)
@@ -345,7 +352,8 @@ with col_center:
                     frame, 
                     custom_conf=conf_threshold, 
                     alert_margin=alert_margin, 
-                    show_focus_zone=show_focus
+                    show_focus_zone=show_focus,
+                    show_generic=show_generic
                 )
                 processed_frame = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
                 
@@ -405,7 +413,8 @@ with col_center:
                     frame, 
                     custom_conf=conf_threshold, 
                     alert_margin=alert_margin, 
-                    show_focus_zone=show_focus
+                    show_focus_zone=show_focus,
+                    show_generic=show_generic
                 )
                 processed_frame = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
                 
