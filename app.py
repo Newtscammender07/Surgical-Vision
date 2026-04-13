@@ -134,16 +134,26 @@ st.markdown("<p style='text-align: center; color:#94a3b8; margin-bottom: 30px;'>
 
 @st.cache_resource
 def load_monitor():
-    # Priority: Local file in repo > Deep runs folder > Fallback
-    if os.path.exists('best.pt'):
-        model_path = 'best.pt'
-        status = "Surgical Specialist (v17)"
-    elif os.path.exists('runs/detect/surgical_detector_v17/weights/best.pt'):
-        model_path = 'runs/detect/surgical_detector_v17/weights/best.pt'
-        status = "Custom Trained (v17)"
+    from pathlib import Path
+    base_dir = Path(__file__).parent.absolute()
+    
+    # Priority paths for different environments
+    local_path = base_dir / 'best.pt'
+    runs_path = base_dir / 'runs' / 'detect' / 'surgical_detector_v17' / 'weights' / 'best.pt'
+    
+    if local_path.exists():
+        model_path = str(local_path)
+        status = "Specialist (L-Path)"
+    elif runs_path.exists():
+        model_path = str(runs_path)
+        status = "Specialist (R-Path)"
     else:
         model_path = 'yolov8n.pt'
-        status = "Generic YOLOv8n"
+        status = "Fallback: Generic YOLOv8n"
+    
+    # Ensure diagnostics also check the absolute path
+    st.session_state['abs_best_pt'] = local_path.exists()
+    
     return SurgicalMonitor(model_path=model_path, confidence_threshold=0.15), status
 
 monitor, model_status = load_monitor()
@@ -185,14 +195,15 @@ with col_left:
     st.markdown("<br>", unsafe_allow_html=True)
     st.info(f"**Engine:** {model_status}")
 
-    # --- System Diagnostics (Helpful for Cloud debugging) ---
+    # --- System Diagnostics ---
     with st.expander("🛠️ System Health"):
         st.write(f"**Python:** {os.sys.version.split(' ')[0]}")
         st.write(f"**Working Dir:** `{os.getcwd()}`")
         
-        # Check for critical files
-        best_pt_exists = os.path.exists('best.pt')
-        st.write(f"**best.pt found:** {'✅' if best_pt_exists else '❌'}")
+        # Check for critical files using the robust path
+        from pathlib import Path
+        best_found = (Path(__file__).parent / 'best.pt').exists()
+        st.write(f"**best.pt found:** {'✅' if best_found else '❌'}")
         
         if st.checkbox("List all files"):
             st.code("\n".join(os.listdir('.')))
