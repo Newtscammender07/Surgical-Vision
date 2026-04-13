@@ -6,6 +6,12 @@ import time
 import numpy as np
 from PIL import Image
 from yolov8_surgical_monitor import SurgicalMonitor
+try:
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+    import av
+    HAS_WEBRTC = True
+except ImportError:
+    HAS_WEBRTC = False
 
 # --- Page configuration ---
 st.set_page_config(
@@ -157,6 +163,31 @@ def load_monitor():
     return SurgicalMonitor(model_path=model_path, confidence_threshold=0.15), status
 
 monitor, model_status = load_monitor()
+
+# --- WebRTC Video Processor ---
+if HAS_WEBRTC:
+    class VideoProcessor:
+        def __init__(self):
+            self.monitor = monitor
+            self.conf_threshold = 0.15
+            self.alert_margin = 0.2
+            self.show_focus_zone = True
+            self.show_generic = False
+
+        def recv(self, frame):
+            img = frame.to_ndarray(format="bgr24")
+            
+            # Process the frame using our monitor
+            processed_img, stats = self.monitor.process_frame(
+                img, 
+                custom_conf=self.conf_threshold, 
+                alert_margin=self.alert_margin, 
+                show_focus_zone=self.show_focus_zone,
+                show_generic=self.show_generic
+            )
+            
+            # Update metrics in session state if needed (optional, tricky in RTC)
+            return av.VideoFrame.from_ndarray(processed_img, format="bgr24")
 
 # Define global state text for badge
 badge_state = "🟢 Model Ready"
@@ -401,52 +432,40 @@ with col_center:
             """, unsafe_allow_html=True)
 
     elif mode_clean == "Live":
-        st.markdown("<h4 style='text-align:center; padding-top: 10px;'>Camera Optics</h4>", unsafe_allow_html=True)
-        run_webcam = st.toggle("🟢 Activate Live Feed", value=False)
-        st.session_state.webcam_active = run_webcam
-        stframe = st.empty()
+        st.markdown("<h4 style='text-align:center; padding-top: 10px;'>High-Tech Camera Optics</h4>", unsafe_allow_html=True)
         
-        if not run_webcam:
-            stframe.markdown("""
-            <div style='height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #0f172a; border-radius: 8px; border: 2px dashed #334155; position: relative; overflow: hidden;'>
-                <div style='position: absolute; font-size: 15rem; color: rgba(51, 65, 85, 0.1); user-select: none;'>🎥</div>
-                <h3 style='color: #94a3b8 !important; margin-bottom: 5px; z-index: 1;'>Camera Optics Offline</h3>
-                <p style='color: #64748b; font-size: 0.95rem; text-align: center; max-width: 80%; z-index: 1;'>Toggle "Activate Live Feed" above to stream directly from your device camera.</p>
-                <div style='background: rgba(248, 113, 113, 0.1); color: #f87171; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; margin-top: 15px; font-weight: 600; z-index: 1;'>
-                    Status: Standby
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+        if HAS_WEBRTC:
+            rtc_config = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
             
-        if run_webcam:
-            cap = cv2.VideoCapture(0)
-            prev_time = time.time()
+            ctx = webrtc_streamer(
+                key="surgical-monitor",
+                mode=WebRtcMode.SENDRECV,
+                rtc_configuration=rtc_config,
+                video_processor_factory=VideoProcessor,
+                media_stream_constraints={"video": True, "audio": False},
+                async_processing=True,
+            )
             
-            while run_webcam:
-                ret, frame = cap.read()
-                if not ret:
-                    st.error("Hardware Warning: Unable to acquire camera feed.")
-                    break
-                    
-                curr_time = time.time()
-                fps = 1.0 / (curr_time - prev_time) if (curr_time - prev_time) > 0 else 0
-                prev_time = curr_time
+            if ctx.video_processor:
+                ctx.video_processor.conf_threshold = conf_threshold
+                ctx.video_processor.alert_margin = alert_margin
+                ctx.video_processor.show_focus_zone = show_focus
+                ctx.video_processor.show_generic = show_generic
                 
-                processed_frame, stats = monitor.process_frame(
-                    frame, 
-                    custom_conf=conf_threshold, 
-                    alert_margin=alert_margin, 
-                    show_focus_zone=show_focus,
-                    show_generic=show_generic
-                )
-                processed_frame = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-                
-                update_metrics(fps, stats["instrument_count"], stats["outside_alerts"], stats["avg_confidence"])
-                
-                stframe.image(processed_frame, channels="RGB", use_column_width=True)
-                
-            cap.release()
-            st.session_state.webcam_active = False
+            st.info("💡 Click **'Start'** to acquire browser camera feed. You may need to grant permission.")
+        else:
+            st.error("WebRTC is not installed. Camera mode is only available in standard OpenCV mode.")
+            run_webcam = st.toggle("🟢 Activate Legacy Live Feed (Local Only)", value=False)
+            if run_webcam:
+                # [Original local capture code...]
+                cap = cv2.VideoCapture(0)
+                stframe = st.empty()
+                while run_webcam:
+                    ret, frame = cap.read()
+                    if not ret: break
+                    processed_frame, stats = monitor.process_frame(frame, custom_conf=conf_threshold, alert_margin=alert_margin, show_focus_zone=show_focus, show_generic=show_generic)
+                    stframe.image(cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB), channels="RGB", use_column_width=True)
+                cap.release()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
