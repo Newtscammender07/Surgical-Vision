@@ -185,6 +185,18 @@ with col_left:
     st.markdown("<br>", unsafe_allow_html=True)
     st.info(f"**Engine:** {model_status}")
 
+    # --- System Diagnostics (Helpful for Cloud debugging) ---
+    with st.expander("🛠️ System Health"):
+        st.write(f"**Python:** {os.sys.version.split(' ')[0]}")
+        st.write(f"**Working Dir:** `{os.getcwd()}`")
+        
+        # Check for critical files
+        best_pt_exists = os.path.exists('best.pt')
+        st.write(f"**best.pt found:** {'✅' if best_pt_exists else '❌'}")
+        
+        if st.checkbox("List all files"):
+            st.code("\n".join(os.listdir('.')))
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 
