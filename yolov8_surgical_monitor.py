@@ -1,0 +1,138 @@
+import cv2
+import numpy as np
+from ultralytics import YOLO
+
+class SurgicalMonitor:
+    def __init__(self, model_path='yolov8n.pt', confidence_threshold=0.3):
+        """
+        Initializes the YOLOv8 model for surgical monitoring.
+        Since we might be using a generic pretrained model for the prototype,
+        we'll just detect the objects it knows (e.g. 'scissors', 'bottle').
+        """
+        self.model = YOLO(model_path)
+        # Load the generic COCO model alongside the custom model
+        # so it can continue to detect people, phones, etc.
+        self.generic_model = YOLO('yolov8n.pt') 
+        self.conf_threshold = confidence_threshold
+
+        # Default focus zone margin (can be overridden per frame)
+        self.focus_zone_margin = 0.2
+
+    def get_focus_zone(self, frame_width, frame_height, margin=None):
+        m = margin if margin is not None else self.focus_zone_margin
+        x1 = int(frame_width * m)
+        y1 = int(frame_height * m)
+        x2 = int(frame_width * (1 - m))
+        y2 = int(frame_height * (1 - m))
+        return (x1, y1, x2, y2)
+
+    def is_outside_focus(self, bbox, focus_zone):
+        """
+        Check if an object's bounding box is mostly outside the focus zone.
+        bbox format: [x1, y1, x2, y2]
+        focus_zone format: (x1, y1, x2, y2)
+        """
+        bx1, by1, bx2, by2 = bbox
+        fx1, fy1, fx2, fy2 = focus_zone
+
+        # Calculate object center
+        cx = (bx1 + bx2) / 2
+        cy = (by1 + by2) / 2
+
+        # Check if center is outside focus zone
+        if cx < fx1 or cx > fx2 or cy < fy1 or cy > fy2:
+            return True
+        return False
+
+    def process_frame(self, frame, custom_conf=None, alert_margin=None, show_focus_zone=True):
+        """
+        Analyzes a single frame, runs detection, and draws alerts.
+        Returns: (annotated_frame, analytics_dict)
+        """
+        conf_to_use = custom_conf if custom_conf is not None else self.conf_threshold
+        
+        # Run BOTH models on the same frame!
+        custom_results = self.model(frame, conf=conf_to_use, verbose=False)
+        generic_results = self.generic_model(frame, conf=0.25, verbose=False)
+
+        annotated_frame = frame.copy()
+        h, w, _ = frame.shape
+        focus_zone = self.get_focus_zone(w, h, margin=alert_margin)
+        
+        # Draw focus zone if toggled on
+        if show_focus_zone:
+            cv2.rectangle(annotated_frame, (focus_zone[0], focus_zone[1]), (focus_zone[2], focus_zone[3]), (0, 255, 0), 2)
+            cv2.putText(annotated_frame, "Primary Focus Zone", (focus_zone[0], focus_zone[1] - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        analytics = {
+            "instrument_count": 0,
+            "generic_count": 0,
+            "outside_alerts": 0,
+            "total_confidence": 0.0,
+            "avg_confidence": 0.0
+        }
+
+        # Helper function to draw boxes
+        def draw_boxes(results_list, annotated_img, fz, is_generic=False):
+            for r in results_list:
+                boxes = r.boxes
+                for box in boxes:
+                    # Bounding box coordinates
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                    
+                    # Confidence and class ID
+                    conf = box.conf[0]
+                    cls_id = int(box.cls[0])
+                    
+                    if is_generic:
+                        class_name = self.generic_model.names[cls_id]
+                        # Change color to Purple for generic objects to distinguish them
+                        color = (255, 0, 255) 
+                        bg_color = (255, 0, 255)
+                        text_color = (255, 255, 255)
+                    else:
+                        class_name = self.model.names[cls_id]
+                        color = (255, 0, 0) # Blue for surgical tools
+                        bg_color = color
+                        text_color = (255, 255, 255)
+                    
+                    if not is_generic:
+                        analytics["instrument_count"] += 1
+                        analytics["total_confidence"] += conf
+                        
+                        if self.is_outside_focus([x1, y1, x2, y2], fz):
+                            analytics["outside_alerts"] += 1
+                            color = (0, 0, 255) # Red for alert bounding box
+                            bg_color = (0, 255, 255) # Yellow background for text
+                            text_color = (0, 0, 0) # Black text
+                            text = f"ALERT: {class_name} outside focus!"
+                        else:
+                            text = f"{class_name} {conf:.2f}"
+                    else:
+                        analytics["generic_count"] += 1
+                        text = f"{class_name} {conf:.2f}"
+
+                    text_size, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
+                    
+                    # Ensure text doesn't go off top of screen
+                    text_y = max(y1, 25)
+                    
+                    # Background rectangle
+                    cv2.rectangle(annotated_img, (x1, text_y - 25), (x1 + text_size[0] + 5, text_y), bg_color, -1)
+                    
+                    # Box and Text
+                    line_thick = 3 if not is_generic else 2
+                    cv2.rectangle(annotated_img, (x1, y1), (x2, y2), color, line_thick)
+                    cv2.putText(annotated_img, text, (x1 + 2, text_y - 7), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 2)
+
+        # Draw generic boxes first so surgical tools are always drawn on top
+        draw_boxes(generic_results, annotated_frame, focus_zone, is_generic=True)
+        draw_boxes(custom_results, annotated_frame, focus_zone, is_generic=False)
+
+        if analytics["instrument_count"] > 0:
+            analytics["avg_confidence"] = analytics["total_confidence"] / analytics["instrument_count"]
+
+        return annotated_frame, analytics

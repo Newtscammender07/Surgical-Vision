@@ -1,0 +1,23 @@
+# Python Byte-code
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# YOLO/Ultralytics
+runs/
+*.pt
+
+# Datasets
+datasets/
+
+# Logs and outputs
+*.log
+out*.txt
+debug_boxes.py
+test_yolo_basic.py
