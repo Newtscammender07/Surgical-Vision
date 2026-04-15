@@ -47,6 +47,23 @@ class SurgicalMonitor:
             return True
         return False
 
+    def calculate_iou(self, box1, box2):
+        """Calculate Intersection over Union between two bounding boxes."""
+        x1_inter = max(box1[0], box2[0])
+        y1_inter = max(box1[1], box2[1])
+        x2_inter = min(box1[2], box2[2])
+        y2_inter = min(box1[3], box2[3])
+
+        inter_area = max(0, x2_inter - x1_inter) * max(0, y2_inter - y1_inter)
+        if inter_area == 0:
+            return 0.0
+
+        box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
+
+        iou = inter_area / float(box1_area + box2_area - inter_area)
+        return iou
+
     def process_frame(self, frame, custom_conf=None, alert_margin=None, show_focus_zone=True, show_generic=True):
         """
         Analyzes a single frame, runs detection, and draws alerts.
@@ -67,6 +84,16 @@ class SurgicalMonitor:
             cv2.rectangle(annotated_frame, (focus_zone[0], focus_zone[1]), (focus_zone[2], focus_zone[3]), (0, 255, 0), 2)
             cv2.putText(annotated_frame, "Primary Focus Zone", (focus_zone[0], focus_zone[1] - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        # Collect generic boxes that shouldn't be ignored for IoU filtering
+        valid_generic_boxes = []
+        for r in generic_results:
+            for box in r.boxes:
+                cls_id = int(box.cls[0])
+                class_name = self.generic_model.names[cls_id]
+                if class_name not in self.ignored_generic:
+                    gx1, gy1, gx2, gy2 = box.xyxy[0].cpu().numpy()
+                    valid_generic_boxes.append((int(gx1), int(gy1), int(gx2), int(gy2)))
 
         analytics = {
             "instrument_count": 0,
@@ -102,6 +129,17 @@ class SurgicalMonitor:
                         text_color = (255, 255, 255)
                     else:
                         class_name = self.model.names[cls_id]
+                        
+                        # Cross-model NMS: Ignore if it overlaps heavily with a generic object (like a person)
+                        suppress = False
+                        for g_box in valid_generic_boxes:
+                            iou = self.calculate_iou((x1, y1, x2, y2), g_box)
+                            if iou > 0.4:  # Adjust threshold as needed
+                                suppress = True
+                                break
+                        if suppress:
+                            continue
+                            
                         color = (255, 0, 0) # Blue for surgical tools
                         bg_color = color
                         text_color = (255, 255, 255)
