@@ -38,12 +38,8 @@ class SurgicalMonitor:
         bx1, by1, bx2, by2 = bbox
         fx1, fy1, fx2, fy2 = focus_zone
 
-        # Calculate object center
-        cx = (bx1 + bx2) / 2
-        cy = (by1 + by2) / 2
-
-        # Check if center is outside focus zone
-        if cx < fx1 or cx > fx2 or cy < fy1 or cy > fy2:
+        # Check if ANY part of the bounding box is outside the focus zone
+        if bx1 < fx1 or bx2 > fx2 or by1 < fy1 or by2 > fy2:
             return True
         return False
 
