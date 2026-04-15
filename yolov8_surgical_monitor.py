@@ -73,7 +73,7 @@ class SurgicalMonitor:
         
         # Run BOTH models on the same frame!
         custom_results = self.model(frame, conf=conf_to_use, verbose=False)
-        generic_results = self.generic_model(frame, conf=0.25, verbose=False)
+        generic_results = self.generic_model(frame, conf=0.15, verbose=False)
 
         annotated_frame = frame.copy()
         h, w, _ = frame.shape
@@ -129,12 +129,19 @@ class SurgicalMonitor:
                         text_color = (255, 255, 255)
                     else:
                         class_name = self.model.names[cls_id]
+
+                        box_area = (x2 - x1) * (y2 - y1)
+                        frame_area = annotated_img.shape[0] * annotated_img.shape[1]
+                        
+                        # Hard constraint: A surgical tool should not take up more than 30% of the entire frame area
+                        if box_area > frame_area * 0.30:
+                            continue
                         
                         # Cross-model NMS: Ignore if it overlaps heavily with a generic object (like a person)
                         suppress = False
                         for g_box in valid_generic_boxes:
                             iou = self.calculate_iou((x1, y1, x2, y2), g_box)
-                            if iou > 0.4:  # Adjust threshold as needed
+                            if iou > 0.25:  # Lowered threshold to reliably catch the overlap
                                 suppress = True
                                 break
                         if suppress:
