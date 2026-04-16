@@ -129,15 +129,15 @@ class SurgicalMonitor:
                         box_area = (x2 - x1) * (y2 - y1)
                         frame_area = annotated_img.shape[0] * annotated_img.shape[1]
                         
-                        # Hard constraint: A surgical tool should not take up more than 30% of the entire frame area
-                        if box_area > frame_area * 0.30:
+                        # Hard constraint: A surgical tool should not take up more than 80% of the entire frame area
+                        if box_area > frame_area * 0.80:
                             continue
                         
                         # Cross-model NMS: Ignore if it overlaps heavily with a generic object (like a person)
                         suppress = False
                         for g_box in valid_generic_boxes:
                             iou = self.calculate_iou((x1, y1, x2, y2), g_box)
-                            if iou > 0.25:  # Lowered threshold to reliably catch the overlap
+                            if iou > 0.75:  # Less aggressive suppression threshold
                                 suppress = True
                                 break
                         if suppress:
