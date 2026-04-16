@@ -129,19 +129,21 @@ class SurgicalMonitor:
                         box_area = (x2 - x1) * (y2 - y1)
                         frame_area = annotated_img.shape[0] * annotated_img.shape[1]
                         
-                        # Hard constraint: A surgical tool should not take up more than 80% of the entire frame area
-                        if box_area > frame_area * 0.80:
-                            continue
+                        # Hard constraint removed entirely. The tools in this dataset 
+                        # can frequently occupy >99% of the frame.
+                        # if box_area > frame_area * 0.80:
+                        #     continue
                         
-                        # Cross-model NMS: Ignore if it overlaps heavily with a generic object (like a person)
+                        # Cross-model NMS logic has been removed to allow custom model to always show detections 
+                        # even if the generic model overlaps with an arbitrary class.
                         suppress = False
-                        for g_box in valid_generic_boxes:
-                            iou = self.calculate_iou((x1, y1, x2, y2), g_box)
-                            if iou > 0.75:  # Less aggressive suppression threshold
-                                suppress = True
-                                break
-                        if suppress:
-                            continue
+                        # for g_box in valid_generic_boxes:
+                        #     iou = self.calculate_iou((x1, y1, x2, y2), g_box)
+                        #     if iou > 0.75:  
+                        #         suppress = True
+                        #         break
+                        # if suppress:
+                        #     continue
                             
                         color = (255, 0, 0) # Blue for surgical tools
                         bg_color = color
