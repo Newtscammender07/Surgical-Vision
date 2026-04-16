@@ -35,14 +35,15 @@ def train_custom_model():
     # Make sure this path points to the data.yaml file inside that downloaded folder!
     # e.g., 'Surgical-Tools-Detection-1/data.yaml'
     
-    yaml_path = "datasets/Surgical-Dataset-YOLO/data.yaml"
+    yaml_path = "../datasets/surgical_data/data.yaml"
     
     results = model.train(
         data=yaml_path, 
-        epochs=50,      # Reduced to 50 for faster prototyping
+        epochs=15,      # Short training run for demonstration
         imgsz=640,
         batch=16,
-        name='surgical_detector_v3'
+        project='runs/detect',
+        name='surgical_detector_v18'
     )
     
     print("\nTraining complete. The best weights are saved in 'runs/detect/surgical_detector_v3/weights/best.pt'")

@@ -140,6 +140,7 @@ st.markdown("<p style='text-align: center; color:#94a3b8; margin-bottom: 30px;'>
 
 @st.cache_resource
 def load_monitor():
+    # Cache busted to ensure the new area constraint removal takes effect!
     from pathlib import Path
     base_dir = Path(__file__).parent.absolute()
     
