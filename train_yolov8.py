@@ -35,7 +35,7 @@ def train_custom_model():
     # Make sure this path points to the data.yaml file inside that downloaded folder!
     # e.g., 'Surgical-Tools-Detection-1/data.yaml'
     
-    yaml_path = "../datasets/surgical_data/data.yaml"
+    yaml_path = "C:/Users/mouni/Downloads/augmented reality/surgical_ar_github/dataset_builder/output/data.yaml"
     
     results = model.train(
         data=yaml_path, 
